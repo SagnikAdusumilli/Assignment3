@@ -36,12 +36,12 @@ Extracted from https://archive.ics.uci.edu/ml/datasets/Bank+Marketing#
 Column Name            | Column Description  
 -----------------------| ------------------- 
 age                    | Age of the customer
-job                    | Customer's Occupation*
-marital                | Marital status of the customer* 
+job                    | Type of job (categorical: 'admin.','blue-collar','entrepreneur','housemaid','management','retired','self-employed','services','student','technician','unemployed','unknown')
+marital                | Marital status (categorical: 'divorced','married','single','unknown'; note: 'divorced' means divorced or widowed) 
 education              | Education level of the customer*
-default                | Has credit in default (yes/no)
+default                | has credit in default(categorical: 'no','yes','unknown')
 balance                | ??
-housing                | has housing loan (yes/no)
+housing                | has housing loan  (categorical: 'no','yes','unknown')
 loan                   | has personal loan (yes/no)  
 contract               | contact communication type (categorical: 'cellular','telephone') 
 day                    | ??
@@ -53,21 +53,99 @@ previous               | number of contacts performed before this campaign and f
 poutcome               | outcome of the previous marketing campaign
 y                      | has the client subscribed a term deposit? (binary: 'yes','no')
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#import packages;
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(Hmisc)
+library(corrplot)
+library(mice)
+library(VIM)
+library(pROC)
+library(caret)
+library(sqldf)
+
+# Clean all variables that might be left by other scripts
+rm(list=ls(all=TRUE))
+
+```
+
+```{r, include=FALSE}
+# Read data
+bankData = read.csv("../data/bank-additional-full.csv", header = TRUE, na.strings =  c("NA","","#NA"), sep=";")
+
+```
 
 ## Data Exploartion
 
+
+
 ```{r bankData, echo=FALSE}
 
-bankData = read.csv("../data/bank-additional-full.csv", header = TRUE, na.strings =  c("NA","","#NA"), sep=";")
+summary(bankData)
 
+str(bankData)
 
+```
+
+Creating a correlation matrix
+
+```{r fig.width=10, fig.height=10, echo = FALSE, warning = FALSE, message = FALSE}
+# we can only Create a correlation matrix with only numeric data, therefore we are going to use sapply to only get numeric data
+# sapply is applying a fuction over list of vector
+## Missing Data
+numericData <- bankData[sapply(bankData,is.numeric)]
+matrix <- cor(numericData, use="pairwise.complete.obs")
+corrplot(matrix, type = "lower", method = "circle", order="hclust", tl.srt = 45, tl.cex = 0.7)
 ```
 
 
 ## Missing Data
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+# Check missing values
+sort(colSums(is.na(bankData)), decreasing = T)
+```
 
 
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+#skip all the data with missing values (no missing values were found in this case)
+bankData <- na.omit(bankData)
+```
 
+
+```{r feature_distribution, echo=FALSE, message=FALSE, warning=FALSE, fig.align="center", fig.cap=" Distribution of Important Features"}
+tmp = bankData %>%filter(complete.cases(.))
+
+library(RColorBrewer) # color palettes
+mainPalette = brewer.pal(8,"Dark2") # pick palettes 
+
+p1 = tmp %>% ggplot(aes(x=age)) + geom_density(fill=mainPalette[1], colour=mainPalette[1], alpha = 0.2) + scale_x_log10()
+
+p2 = tmp %>% ggplot(aes(x=duration)) + geom_density(fill=mainPalette[2], colour=mainPalette[2], alpha = 0.2) + scale_x_log10()
+
+p3 = tmp %>% ggplot(aes(x=campaign)) + geom_density(fill=mainPalette[3], colour=mainPalette[3], alpha = 0.2) + scale_x_log10()
+
+p4 = tmp %>% ggplot(aes(x=pdays)) + geom_density(fill=mainPalette[4], colour=mainPalette[4], alpha = 0.2) + scale_x_log10()
+
+p5 = tmp %>% ggplot(aes(x=previous)) + geom_density(fill=mainPalette[5], colour=mainPalette[5], alpha = 0.2) + scale_x_log10()
+
+p6 = tmp %>% ggplot(aes(x=emp.var.rate)) + geom_density(fill=mainPalette[6], colour=mainPalette[6], alpha = 0.2) + scale_x_log10()
+
+p7 = tmp %>% ggplot(aes(x=cons.price.idx)) + geom_density(fill=mainPalette[7], colour=mainPalette[7], alpha = 0.2) + scale_x_log10()
+
+p8 = tmp %>% ggplot(aes(x=cons.conf.idx)) + geom_density(fill=mainPalette[8], colour=mainPalette[8], alpha = 0.2) + scale_x_log10() # this plot looks strange
+
+p9 = tmp %>% ggplot(aes(x=euribor3m)) + geom_density(fill=mainPalette[1], colour=mainPalette[1], alpha = 0.2) + scale_x_log10()
+
+p10 = tmp %>% ggplot(aes(x=nr.employed)) + geom_density(fill=mainPalette[2], colour=mainPalette[2], alpha = 0.2) + scale_x_log10()
+
+
+library(gridExtra) # arrange grids
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10)
+rm(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,tmp)
+```
 
 ## Insights from Data explorations
 
