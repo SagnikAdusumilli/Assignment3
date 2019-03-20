@@ -323,10 +323,11 @@ solution
 
 library(caret)
 confusionMatrix(factor(solution$subscribed), solution$y)
+#Balanced Accuracy: 0.6075
 
 library(pROC)
 auc(as.numeric(solution$y), as.numeric(solution$subscribed))
-#Area under the curve: 0.5897
+#Area under the curve: 0.5897, now it is 0.6075
 
 roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 
@@ -365,12 +366,13 @@ solution
 #library(caret)
 confusionMatrix(factor(solution$subscribed), solution$y)
 #nrow(solution[solution$y=='no',])
+#Balanced Accuracy: 0.51499
 
 #library(pROC)
 auc(as.numeric(solution$y), as.numeric(factor(solution$subscribed)))
-#Area under the curve: 0.5109
+#Area under the curve: 0.5109, now it is 0.515
 
-roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
+roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(factor(solution$subscribed))), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 
 
 ################################### Support vector machine (SVM)
