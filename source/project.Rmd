@@ -170,12 +170,12 @@ rm(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,tmp)
 ```{r}
 bankData1he <- bankData
 #install.packages(ade4)
-#One-hot-encoding features:
+#One-hot-encoding of categorical features:
 library(ade4)
-#library(data.table)
-ohe_feats = c('job', 'marital', 'education', 'default', 'housing', 
+
+categorical_columns = c('job', 'marital', 'education', 'default', 'housing', 
              'loan', 'contact', 'month', 'day_of_week', 'poutcome')
-for (f in ohe_feats){
+for (f in categorical_columns){
   df_all_dummy = acm.disjonctif(bankData1he[f])
   bankData1he[f] = NULL
   bankData1he = cbind(bankData1he, df_all_dummy)
@@ -186,71 +186,64 @@ head(bankData1he)
 
 
 
-# Remove y column before clustering
+# Remove y column (column 11) before scaling and clustering
 #scale the variables
-scaled_bd <- scale(bankData1he[,-11])
+scaled_bd <- scale(bankData1he[,-c(11)])
 
 #Elbow Method for finding the optimal number of clusters
 set.seed(123)
 # Compute and plot wss for k = 2 to k = 15.
 k.max <- 15
-data <- scaled_bd
 wss <- sapply(1:k.max, 
-              function(k){kmeans(data, k, nstart=50,iter.max = 15 )$tot.withinss})
+              function(k){kmeans(scaled_bd, k, nstart=50,iter.max = 15 )$tot.withinss})
 
 plot(1:k.max, wss,
      type="b", pch = 19, frame = FALSE, 
      xlab="Number of clusters K",
      ylab="Total within-clusters sum of squares")
 
-# k = 4
+# k = 3, from the above plot we picked the elbow to be k=3 meaning 3 clusters
 library(cluster)
-clarax <- clara(bankData1he[,-11], 4, metric = "manhattan", stand = TRUE, 
+clarax <- clara(scaled_bd, 3, metric = "jaccard", stand = TRUE, 
       samples = 5, pamLike = TRUE)
 
 clarax
-# cluster sizes: 15375, 8373, 12472, 4968
+# cluster sizes: 19144, 9339, 12705
 
-dd <- cbind(bankData, cluster = clarax$clustering)
-head(dd, n = 4)
+bankDataWithCluster <- cbind(bankData, cluster = clarax$clustering)
+#head(bankDataWithCluster, n = 4)
 
 # Medoids
 clarax$medoids
-# The mediods are 631, 14877, 30462, 24381
+# The mediods are 4152, 21730, 13128
 
 # plot the cluster solution
 library(fpc)
 plotcluster(scaled_bd, clarax$clustering)
 
-dd[610:650,]
-dd[14860:14900,]
-dd[30440:30480,]
-dd[24360:24400,]
+# display data around the mediods for each cluster
+bankDataWithCluster[4140:4160,]
+bankDataWithCluster[21720:21740,]
+bankDataWithCluster[13120:13140,]
 
-cluster1 <- dd[dd$cluster==1,]
-cluster2 <- dd[dd$cluster==2,]
-cluster3 <- dd[dd$cluster==3,]
-cluster4 <- dd[dd$cluster==4,]
+cluster1 <- bankDataWithCluster[bankDataWithCluster$cluster==1,]
+cluster2 <- bankDataWithCluster[bankDataWithCluster$cluster==2,]
+cluster3 <- bankDataWithCluster[bankDataWithCluster$cluster==3,]
 
 cluster1yes <- cluster1[cluster1$y=='yes',]
-nrow(cluster1yes) #851
+nrow(cluster1yes) #1725
 cluster1no <- cluster1[cluster1$y=='no',]
-nrow(cluster1no) #14524
+nrow(cluster1no) #17419
 
 cluster2yes <- cluster2[cluster2$y=='yes',]
-nrow(cluster2yes) #492
+nrow(cluster2yes) #1208
 cluster2no <- cluster2[cluster2$y=='no',]
-nrow(cluster2no) #7881
+nrow(cluster2no) #8131
 
 cluster3yes <- cluster3[cluster3$y=='yes',]
-nrow(cluster3yes) #2832
+nrow(cluster3yes) #1707
 cluster3no <- cluster3[cluster3$y=='no',]
-nrow(cluster3no) #9640
-
-cluster4yes <- cluster4[cluster4$y=='yes',]
-nrow(cluster4yes) #465
-cluster4no <- cluster4[cluster4$y=='no',]
-nrow(cluster4no) #4503
+nrow(cluster3no) #10998
 
 ```
 
@@ -268,13 +261,10 @@ nrow(cluster4no) #4503
 
 ## Modeling
 
+To learn more about each cluster, we will run a Random Forest and get the important features (columns) of the cluster. We will also run a Decision Tree to know which are the most important features (columns).
 ```{r}
-######################################## Random Forest
-#15375
-row_count <- nrow(cluster1)
-shuffled_rows <- sample(row_count)
-cluster1train <- cluster1[head(shuffled_rows,floor(row_count*0.75)),]
-cluster1test <- cluster1[tail(shuffled_rows,floor(row_count*0.25)),]
+######################################## Random Forest on cluster1 - most important features
+#19144 rows
 
 # Set a random seed
 set.seed(754)
@@ -288,11 +278,7 @@ rf_model <- randomForest(y ~ age + job + marital + education + default +
                                             campaign + pdays + previous +
                                             poutcome + emp.var.rate + cons.price.idx +
                                             cons.conf.idx + euribor3m + nr.employed,
-                                            data = cluster1train)
-
-# Show model error
-plot(rf_model, ylim=c(0,0.36))
-legend('topright', colnames(rf_model$err.rate), col=1:3, fill=1:3)
+                                            data = cluster1)
 
 # Get importance
 importance    <- importance(rf_model)
@@ -314,30 +300,13 @@ ggplot(rankImportance, aes(x = reorder(Variables, Importance),
   coord_flip() + 
   theme_few()
 
-
-# Predict using the test set
-prediction <- predict(rf_model, cluster1test)
-
-solution <- data.frame(cluster1test, subscribed = prediction)
-solution
-
-library(caret)
-confusionMatrix(factor(solution$subscribed), solution$y)
-#Balanced Accuracy: 0.6075
-
-library(pROC)
-auc(as.numeric(solution$y), as.numeric(solution$subscribed))
-#Area under the curve: 0.5897, now it is 0.6075
-
-roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
+#Top 2 features: age, euribor3m
+#3rd feature: job
+#4th feature: nr.employed
 
 
-##################################### Decision Tree
-#8373
-row_count <- nrow(cluster2)
-shuffled_rows <- sample(row_count)
-cluster2train <- cluster2[head(shuffled_rows,floor(row_count*0.75)),]
-cluster2test <- cluster2[tail(shuffled_rows,floor(row_count*0.25)),]
+##################################### Decision Tree on cluster1 - most important features
+#19144 rows
 
 set.seed(1984)
 
@@ -348,101 +317,263 @@ dt_model <- rpart(y ~ age + job + marital + education + default +
                                             campaign + pdays + previous +
                                             poutcome + emp.var.rate + cons.price.idx +
                                             cons.conf.idx + euribor3m + nr.employed,
-                                            data = cluster2train,
+                                            data = cluster2,
                                             method = "class",
                                             minsplit = 2,
                                             minbucket = 1)
 library(rpart.plot)
 rpart.plot(dt_model, extra=4) # plot tree
 
-# Predict using the test set
-prediction <- predict(dt_model, cluster2test)
+summary(dt_model)
 
-solution <- data.frame(cluster2test, subscribed = prediction)
-solution$subscribed <- ifelse(solution$subscribed.yes > solution$subscribed.no, "yes", "no")
-
-solution
-
-#library(caret)
-confusionMatrix(factor(solution$subscribed), solution$y)
-#nrow(solution[solution$y=='no',])
-#Balanced Accuracy: 0.51499
-
-#library(pROC)
-auc(as.numeric(solution$y), as.numeric(factor(solution$subscribed)))
-#Area under the curve: 0.5109, now it is 0.515
-
-roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(factor(solution$subscribed))), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
+#variable importance: nr.employed, euribor3m, emp.var.rate, cons.conf.idx, cons.price.idx, month, poutcome, pdays
 
 
-################################### Support vector machine (SVM)
-cluster31he <- cluster3
-#install.packages(ade4)
-#One-hot-encoding features:
-#library(ade4)
-#library(data.table)
-ohe_feats = c('job', 'marital', 'education', 'default', 'housing', 
-             'loan', 'contact', 'month', 'day_of_week', 'poutcome')
-for (f in ohe_feats){
-  df_all_dummy = acm.disjonctif(cluster31he[f])
-  cluster31he[f] = NULL
-  cluster31he = cbind(cluster31he, df_all_dummy)
-}
-cluster31he
-cluster31he$y <- ifelse(cluster31he$y == "yes", 1, 0)
-cluster31he$y <- factor(cluster31he$y)
 
-#remove duration as per UCI website
-cluster31he$duration <- NULL
-#remove cluster column 12
-cluster31he <- cluster31he[,-12]
-nrow(cluster31he[cluster31he$default.yes==1,]) #0
-#remove default.yes column 38
-cluster31he <- cluster31he[,-38]
-nrow(cluster31he[cluster31he$education.illiterate==1,]) #4
-#remove education.illiterate 32
-cluster31he <- cluster31he[,-32]
+######################################## Random Forest on cluster2 - most important features
+#9339 rows
 
-#12472
-row_count <- nrow(cluster31he)
+# Set a random seed
+set.seed(454)
+
+#library(randomForest)
+# Build the model (note: not all possible variables are used)
+# remove duration column as per website recommendation
+rf_model <- randomForest(y ~ age + job + marital + education + default + 
+                                            housing + loan + contact + 
+                                            month + day_of_week +
+                                            campaign + pdays + previous +
+                                            poutcome + emp.var.rate + cons.price.idx +
+                                            cons.conf.idx + euribor3m + nr.employed,
+                                            data = cluster2)
+
+# Get importance
+importance    <- importance(rf_model)
+varImportance <- data.frame(Variables = row.names(importance), 
+                            Importance = round(importance[ ,'MeanDecreaseGini'],2))
+
+# Create a rank variable based on importance
+rankImportance <- varImportance %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+#library(ggthemes)
+# Use ggplot2 to visualize the relative importance of variables
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+    hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() + 
+  theme_few()
+
+#Top 2 features: euribor3m, age
+#3rd feature: job
+#4th feature: nr.employed
+
+
+##################################### Decision Tree on cluster2 - most important features
+#9339 rows
+
+set.seed(1484)
+
+#library(rpart)
+dt_model <- rpart(y ~ age + job + marital + education + default + 
+                                            housing + loan + contact + 
+                                            month + day_of_week +
+                                            campaign + pdays + previous +
+                                            poutcome + emp.var.rate + cons.price.idx +
+                                            cons.conf.idx + euribor3m + nr.employed,
+                                            data = cluster2,
+                                            method = "class",
+                                            minsplit = 2,
+                                            minbucket = 1)
+#library(rpart.plot)
+rpart.plot(dt_model, extra=4) # plot tree
+
+summary(dt_model)
+
+#variable importance: nr.employed, euribor3m, emp.var.rate, cons.conf.idx, cons.price.idx, month, poutcome, pdays
+
+
+
+######################################## Random Forest on cluster3 - most important features
+#12705 rows
+
+# Set a random seed
+set.seed(760)
+
+#library(randomForest)
+# Build the model (note: not all possible variables are used)
+# remove duration column as per website recommendation
+rf_model <- randomForest(y ~ age + job + marital + education + default + 
+                                            housing + loan + contact + 
+                                            month + day_of_week +
+                                            campaign + pdays + previous +
+                                            poutcome + emp.var.rate + cons.price.idx +
+                                            cons.conf.idx + euribor3m + nr.employed,
+                                            data = cluster3)
+
+# Get importance
+importance    <- importance(rf_model)
+varImportance <- data.frame(Variables = row.names(importance), 
+                            Importance = round(importance[ ,'MeanDecreaseGini'],2))
+
+# Create a rank variable based on importance
+rankImportance <- varImportance %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+#library(ggthemes)
+# Use ggplot2 to visualize the relative importance of variables
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+    hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() + 
+  theme_few()
+
+#Top 2 features: age, euribor3m
+#3rd feature: job
+#4th feature: nr.employed
+
+
+##################################### Decision Tree on cluster3 - most important features
+#12705 rows
+
+set.seed(1254)
+
+#library(rpart)
+dt_model <- rpart(y ~ age + job + marital + education + default + 
+                                            housing + loan + contact + 
+                                            month + day_of_week +
+                                            campaign + pdays + previous +
+                                            poutcome + emp.var.rate + cons.price.idx +
+                                            cons.conf.idx + euribor3m + nr.employed,
+                                            data = cluster3,
+                                            method = "class",
+                                            minsplit = 2,
+                                            minbucket = 1)
+#library(rpart.plot)
+rpart.plot(dt_model, extra=4) # plot tree
+
+summary(dt_model)
+
+#variable importance: nr.employed, euribor3m, emp.var.rate, cons.conf.idx, cons.price.idx, month, pdays, poutcome, previous
+
+
+########################### Supervised Learning - prediction models
+
+######################################## Random Forest
+row_count <- nrow(bankDataWithCluster)
 shuffled_rows <- sample(row_count)
-cluster3train <- cluster31he[head(shuffled_rows,floor(row_count*0.75)),]
-cluster3test <- cluster31he[tail(shuffled_rows,floor(row_count*0.25)),]
+train <- bankDataWithCluster[head(shuffled_rows,floor(row_count*0.75)),]
+test <- bankDataWithCluster[tail(shuffled_rows,floor(row_count*0.25)),]
 
-#library(caret)
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
-set.seed(3233)
+# Set a random seed
+set.seed(754)
 
-svm_Linear <- train(y ~ .,
-                          data = cluster3train,
-                          method = "svmLinear",
-                          trControl=trctrl,
-                          preProcess = c("center", "scale"),
-                          tuneLength = 10)
+#library(randomForest)
+# Build the model (note: not all possible variables are used)
+# remove duration column as per website recommendation
+rf_model <- randomForest(y ~ age + job + marital + education + default + 
+                                            housing + loan + contact + 
+                                            month + day_of_week +
+                                            campaign + pdays + previous +
+                                            poutcome + emp.var.rate + cons.price.idx +
+                                            cons.conf.idx + euribor3m + nr.employed,
+                                            data = train)
+
+# Show model error
+plot(rf_model, ylim=c(0,0.36))
+legend('topright', colnames(rf_model$err.rate), col=1:3, fill=1:3)
+
+# Get importance
+importance    <- importance(rf_model)
+varImportance <- data.frame(Variables = row.names(importance), 
+                            Importance = round(importance[ ,'MeanDecreaseGini'],2))
+
+# Create a rank variable based on importance
+rankImportance <- varImportance %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+#library(ggthemes)
+# Use ggplot2 to visualize the relative importance of variables
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  geom_text(aes(x = Variables, y = 0.5, label = Rank),
+    hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables') +
+  coord_flip() + 
+  theme_few()
+
 
 # Predict using the test set
-prediction <- predict(svm_Linear, newdata = cluster3test)
-prediction
+prediction <- predict(rf_model, test)
 
-solution <- data.frame(cluster3test, subscribed = prediction)
-solution
+solution <- data.frame(test, subscribed = prediction)
+#solution
 
-#library(caret)
+library(caret)
 confusionMatrix(factor(solution$subscribed), solution$y)
+#Balanced Accuracy: 0.6326
 
-#library(pROC)
+library(pROC)
 auc(as.numeric(solution$y), as.numeric(solution$subscribed))
-#Area under the curve: 0.5997
+#Area under the curve: 0.6326
 
 roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 
 
-################################# Naive Bayes
-#4968
-row_count <- nrow(cluster4)
+##################################### Decision Tree
+row_count <- nrow(bankDataWithCluster)
 shuffled_rows <- sample(row_count)
-cluster4train <- cluster4[head(shuffled_rows,floor(row_count*0.75)),]
-cluster4test <- cluster4[tail(shuffled_rows,floor(row_count*0.25)),]
+train <- bankDataWithCluster[head(shuffled_rows,floor(row_count*0.75)),]
+test <- bankDataWithCluster[tail(shuffled_rows,floor(row_count*0.25)),]
+
+set.seed(1934)
+
+#library(rpart)
+dt_model <- rpart(y ~ age + job + marital + education + default + 
+                                            housing + loan + contact + 
+                                            month + day_of_week +
+                                            campaign + pdays + previous +
+                                            poutcome + emp.var.rate + cons.price.idx +
+                                            cons.conf.idx + euribor3m + nr.employed,
+                                            data = train,
+                                            method = "class",
+                                            minsplit = 2,
+                                            minbucket = 1)
+#library(rpart.plot)
+rpart.plot(dt_model, extra=4) # plot tree
+
+# Predict using the test set
+prediction <- predict(dt_model, test)
+
+solution <- data.frame(test, subscribed = prediction)
+solution$subscribed <- ifelse(solution$subscribed.yes > solution$subscribed.no, "yes", "no")
+
+#solution
+
+#library(caret)
+confusionMatrix(factor(solution$subscribed), solution$y)
+#nrow(solution[solution$y=='no',])
+#Balanced Accuracy: 0.5914
+
+#library(pROC)
+auc(as.numeric(solution$y), as.numeric(factor(solution$subscribed)))
+#Area under the curve: 0.5914
+
+roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(factor(solution$subscribed))), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
+
+
+################################# Naive Bayes
+row_count <- nrow(bankDataWithCluster)
+shuffled_rows <- sample(row_count)
+train <- bankDataWithCluster[head(shuffled_rows,floor(row_count*0.75)),]
+test <- bankDataWithCluster[tail(shuffled_rows,floor(row_count*0.25)),]
 
 library(e1071)
 
@@ -452,30 +583,94 @@ nb_model <- naiveBayes(y ~ age + job + marital + education + default +
                                             campaign + pdays + previous +
                                             poutcome + emp.var.rate + cons.price.idx +
                                             cons.conf.idx + euribor3m + nr.employed,
-                                            data=cluster4train)
+                                            data=train)
 
 # Predict using the test set
-prediction <- predict(nb_model, cluster4test)
+prediction <- predict(nb_model, test)
 
-solution <- data.frame(cluster4test, subscribed = prediction)
-solution
+solution <- data.frame(test, subscribed = prediction)
+#solution
 
 #library(caret)
 confusionMatrix(factor(solution$subscribed), solution$y)
-#Balanced Accuracy: 0.7160
+#Balanced Accuracy: 0.7129
 
 #library(pROC)
 auc(as.numeric(solution$y), as.numeric(solution$subscribed))
-#Area under the curve: 0.716
+#Area under the curve: 0.7129
 
 roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 
+
+
+################################### Support vector machine (SVM)
+# SVM takes over 30 minutes to run so we are excluding it
+##bankDataWithCluster1he <- bankDataWithCluster
+#install.packages(ade4)
+#One-hot-encoding of categorical features because SVM only accepts numerical columns:
+#library(ade4)
+#library(data.table)
+##categorical_columns = c('job', 'marital', 'education', 'default', 'housing', 
+##                        'loan', 'contact', 'month', 'day_of_week', 'poutcome')
+##for (f in categorical_columns){
+##  df_all_dummy = acm.disjonctif(bankDataWithCluster1he[f])
+##  bankDataWithCluster1he[f] = NULL
+##  bankDataWithCluster1he = cbind(bankDataWithCluster1he, df_all_dummy)
+##}
+
+##bankDataWithCluster1he$y <- ifelse(bankDataWithCluster1he$y == "yes", 1, 0)
+##bankDataWithCluster1he$y <- factor(bankDataWithCluster1he$y)
+
+#remove duration as per UCI website
+##bankDataWithCluster1he$duration <- NULL
+
+#remove cluster column 12
+##bankDataWithCluster1he$cluster <- NULL
+
+##nrow(bankDataWithCluster1he[bankDataWithCluster1he$default.yes==1,]) #3
+#remove default.yes column 38 because it is nearly all 0's and SVM doesn't allow that
+##bankDataWithCluster1he$default.yes <- NULL
+
+##nrow(bankDataWithCluster1he[bankDataWithCluster1he$education.illiterate==1,]) #19
+#remove education.illiterate column 32 because it is nearly all 0's and SVM doesn't allow that
+##bankDataWithCluster1he$education.illiterate <- NULL
+
+##row_count <- nrow(bankDataWithCluster1he)
+##shuffled_rows <- sample(row_count)
+##train <- bankDataWithCluster1he[head(shuffled_rows,floor(row_count*0.75)),]
+##test <- bankDataWithCluster1he[tail(shuffled_rows,floor(row_count*0.25)),]
+
+#library(caret)
+##trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+##set.seed(3233)
+
+##svm_Linear <- train(y ~ .,
+##                          data = train,
+##                          method = "svmLinear",
+##                          trControl=trctrl,
+##                          preProcess = c("center", "scale"),
+##                          tuneLength = 10)
+
+# Predict using the test set
+##prediction <- predict(svm_Linear, newdata = test)
+##prediction
+
+##solution <- data.frame(test, subscribed = prediction)
+##solution
+
+#library(caret)
+##confusionMatrix(factor(solution$subscribed), solution$y)
+
+#library(pROC)
+##auc(as.numeric(solution$y), as.numeric(solution$subscribed))
+#Area under the curve: 0.5997
+
+##roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col ##= "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 ```
 
 The higher the area under the curve (AUC), the better the prediction model.
-We tried 4 classification models: Random Forest, Decision Tree, Support Vector Machine (SVM), and Naive Bayes.
+We tried 4 classification models: Random Forest, Decision Tree, Naive Bayes, and Support Vector Machine (SVM). SVM takes over 30 minutes to run so we are excluding its results.
 The order of models from highest AUC to lowest is:
-1. Naive Bayes    (AUC: 0.716)
-2. SVM            (AUC: 0.5997)
-3. Random Forest  (AUC: 0.5897)
-4. Decision Tree  (AUC: 0.5109)
+1. Naive Bayes    (AUC: 0.7129)
+2. Random Forest  (AUC: 0.6326)
+3. Decision Tree  (AUC: 0.5914)
