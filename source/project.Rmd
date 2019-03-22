@@ -19,8 +19,6 @@ Extracted from https://archive.ics.uci.edu/ml/datasets/Bank+Marketing#
 
 Column Name            | Column Description  
 -----------------------| -------------------
-Input variables:
-- bank client data:
 age                    | age of the customer (numeric)
 job                    | type of job (categorical: 'admin.','blue-collar','entrepreneur','housemaid','management','retired','self-employed','services','student','technician','unemployed','unknown')
 marital                | marital status (categorical: 'divorced','married','single','unknown'; note: 'divorced' means divorced or widowed) 
@@ -28,27 +26,19 @@ education              | education level of the customer (categorical: 'basic.4y
 default                | has credit in default? (categorical: 'no','yes','unknown')
 housing                | has housing loan? (categorical: 'no','yes','unknown')
 loan                   | has personal loan? (categorical: 'no','yes','unknown')
-
-- related with the last contact of the current campaign:
 contact                | contact communication type (categorical: 'cellular','telephone')
 month                  | last contact month of year (categorical: 'jan', 'feb', 'mar', ..., 'nov', 'dec')
 day_of_week            | last contact day of the week (categorical: 'mon','tue','wed','thu','fri')
 duration               | last contact duration, in seconds (numeric). Important note: this attribute highly affects the output target (e.g., if duration=0 then y='no'). Yet, the duration is not known before a call is performed. Also, after the end of the call y is obviously known. Thus, this input should only be included for benchmark purposes and should be discarded if the intention is to have a realistic predictive model
-
-- other attributes:
 campaign               | number of contacts performed during this campaign and for this client (numeric, includes last contact)
 pdays                  | number of days that passed by after the client was last contacted from a previous campaign (numeric; 999 means client was not previously contacted)
 previous               | number of contacts performed before this campaign and for this client (numeric)
 poutcome               | outcome of the previous marketing campaign (categorical: 'failure','nonexistent','success')
-
-- social and economic context attributes:
 emp.var.rate           | employment variation rate - quarterly indicator (numeric)
 cons.price.idx         | consumer price index - monthly indicator (numeric) 
 cons.conf.idx          | consumer confidence index - monthly indicator (numeric) 
 euribor3m              | euribor 3 month rate - daily indicator (numeric)
 nr.employed            | number of employees - quarterly indicator (numeric)
-
-Output variable (desired target):
 y                      | has the client subscribed a term deposit? (binary: 'yes','no')
 
 ```{r setup, include=FALSE}
@@ -156,11 +146,6 @@ grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10)
 rm(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,tmp)
 ```
 
-
-## Insights from Data explorations
-
-
- 
 
 ## Data Preparation and Unsupervised Learning (Clustering)
 
@@ -595,7 +580,7 @@ roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), p
 
 ```
 
-```{r}
+```{r, include=FALSE}
 ################################### Support vector machine (SVM)
 # SVM takes over 30 minutes to run so we are excluding it
 ##bankDataWithCluster1he <- bankDataWithCluster
