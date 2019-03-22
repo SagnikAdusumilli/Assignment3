@@ -6,21 +6,6 @@ output: word_document
 ---
 
 
-## Abstract
-
-TBD
-
-
-## Background 
-
-TBD
-
-
-## Objective
-
-TBD
-
-
 # Data Analysis
 
 Source of data: [Moro et al., 2014] S. Moro, P. Cortez and P. Rita. A Data-Driven Approach to Predict the Success of Bank Telemarketing. Decision Support Systems, Elsevier, 62:22-31, June 2014
@@ -30,24 +15,40 @@ Extracted from https://archive.ics.uci.edu/ml/datasets/Bank+Marketing#
 
 ## Data Dictionary
 
+20 input variables and 1 output variable (desired target)
+
 Column Name            | Column Description  
------------------------| ------------------- 
-age                    | Age of the customer
-job                    | Type of job (categorical: 'admin.','blue-collar','entrepreneur','housemaid','management','retired','self-employed','services','student','technician','unemployed','unknown')
-marital                | Marital status (categorical: 'divorced','married','single','unknown'; note: 'divorced' means divorced or widowed) 
-education              | Education level of the customer*
-default                | has credit in default(categorical: 'no','yes','unknown')
-balance                | ??
-housing                | has housing loan  (categorical: 'no','yes','unknown')
-loan                   | has personal loan (yes/no)  
-contract               | contact communication type (categorical: 'cellular','telephone') 
-day                    | ??
-month                  | month the customer was contrained previously in the year
-duration               |  last contact duration, in seconds (numeric). Important note: this attribute highly affects the output target (e.g., if duration=0 then y='no'). Yet, the duration is not known before a call is performed. Also, after the end of the call y is obviously 
-campaign               |  number of contacts performed during this campaign and for this client (numeric, includes last contact)
+-----------------------| -------------------
+Input variables:
+- bank client data:
+age                    | age of the customer (numeric)
+job                    | type of job (categorical: 'admin.','blue-collar','entrepreneur','housemaid','management','retired','self-employed','services','student','technician','unemployed','unknown')
+marital                | marital status (categorical: 'divorced','married','single','unknown'; note: 'divorced' means divorced or widowed) 
+education              | education level of the customer (categorical: 'basic.4y','basic.6y','basic.9y','high.school','illiterate','professional.course','university.degree','unknown')
+default                | has credit in default? (categorical: 'no','yes','unknown')
+housing                | has housing loan? (categorical: 'no','yes','unknown')
+loan                   | has personal loan? (categorical: 'no','yes','unknown')
+
+- related with the last contact of the current campaign:
+contact                | contact communication type (categorical: 'cellular','telephone')
+month                  | last contact month of year (categorical: 'jan', 'feb', 'mar', ..., 'nov', 'dec')
+day_of_week            | last contact day of the week (categorical: 'mon','tue','wed','thu','fri')
+duration               | last contact duration, in seconds (numeric). Important note: this attribute highly affects the output target (e.g., if duration=0 then y='no'). Yet, the duration is not known before a call is performed. Also, after the end of the call y is obviously known. Thus, this input should only be included for benchmark purposes and should be discarded if the intention is to have a realistic predictive model
+
+- other attributes:
+campaign               | number of contacts performed during this campaign and for this client (numeric, includes last contact)
 pdays                  | number of days that passed by after the client was last contacted from a previous campaign (numeric; 999 means client was not previously contacted)
-previous               | number of contacts performed before this campaign and for this client
-poutcome               | outcome of the previous marketing campaign
+previous               | number of contacts performed before this campaign and for this client (numeric)
+poutcome               | outcome of the previous marketing campaign (categorical: 'failure','nonexistent','success')
+
+- social and economic context attributes:
+emp.var.rate           | employment variation rate - quarterly indicator (numeric)
+cons.price.idx         | consumer price index - monthly indicator (numeric) 
+cons.conf.idx          | consumer confidence index - monthly indicator (numeric) 
+euribor3m              | euribor 3 month rate - daily indicator (numeric)
+nr.employed            | number of employees - quarterly indicator (numeric)
+
+Output variable (desired target):
 y                      | has the client subscribed a term deposit? (binary: 'yes','no')
 
 ```{r setup, include=FALSE}
@@ -87,7 +88,6 @@ summary(bankData)
 
 ```
 
-
 Structure:
 ```{r structure, echo=FALSE}
 
@@ -95,10 +95,22 @@ str(bankData)
 
 ```
 
+Missing Data:
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+# Check missing values
+sort(colSums(is.na(bankData)), decreasing = T)
 
-Creating a correlation matrix
+```
+Our dataset does not have any rows with columns that contain NA, so no rows will be omitted and no data imputing is necessary.
 
-```{r matrix, fig.width=10, fig.height=10, echo = FALSE, warning = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+#skip all the data with missing values (no missing values were found in this case)
+#bankData <- na.omit(bankData)
+
+```
+
+Correlation matrix:
+```{r matrix, fig.width=5, fig.height=5, echo = FALSE, warning = FALSE, message = FALSE}
 # we can only Create a correlation matrix with only numeric data, therefore we are going to use sapply to only get numeric data
 # sapply is applying a fuction over list of vector
 numericData <- bankData[sapply(bankData,is.numeric)]
@@ -108,23 +120,7 @@ library(corrplot)
 corrplot(matrix, type = "lower", method = "circle", order="hclust", tl.srt = 45, tl.cex = 0.7)
 
 ```
-
-
-## Missing Data
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
-# Check missing values
-sort(colSums(is.na(bankData)), decreasing = T)
-
-```
-Our dataset does not have any rows with columns that contain N/A.
-
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
-#skip all the data with missing values (no missing values were found in this case)
-#bankData <- na.omit(bankData)
-
-```
-
-
+Distribution of important features:
 ```{r feature_distribution, echo=FALSE, message=FALSE, warning=FALSE, fig.align="center", fig.cap=" Distribution of Important Features"}
 
 library(dplyr)
@@ -134,25 +130,25 @@ library(RColorBrewer) # color palettes
 mainPalette = brewer.pal(8,"Dark2") # pick palettes 
 
 library(ggplot2)
-p1 = tmp %>% ggplot(aes(x=age)) + geom_density(fill=mainPalette[1], colour=mainPalette[1], alpha = 0.2) #+ scale_x_log10()
+p1 = tmp %>% ggplot(aes(x=age)) + geom_density(fill=mainPalette[1], colour=mainPalette[1], alpha = 0.2) 
 
-p2 = tmp %>% ggplot(aes(x=duration)) + geom_density(fill=mainPalette[2], colour=mainPalette[2], alpha = 0.2) #+ scale_x_log10()
+p2 = tmp %>% ggplot(aes(x=duration)) + geom_density(fill=mainPalette[2], colour=mainPalette[2], alpha = 0.2) 
 
-p3 = tmp %>% ggplot(aes(x=campaign)) + geom_density(fill=mainPalette[3], colour=mainPalette[3], alpha = 0.2) #+ scale_x_log10()
+p3 = tmp %>% ggplot(aes(x=campaign)) + geom_density(fill=mainPalette[3], colour=mainPalette[3], alpha = 0.2) 
 
-p4 = tmp %>% ggplot(aes(x=pdays)) + geom_density(fill=mainPalette[4], colour=mainPalette[4], alpha = 0.2) #+ scale_x_log10()
+p4 = tmp %>% ggplot(aes(x=pdays)) + geom_density(fill=mainPalette[4], colour=mainPalette[4], alpha = 0.2) 
 
-p5 = tmp %>% ggplot(aes(x=previous)) + geom_density(fill=mainPalette[5], colour=mainPalette[5], alpha = 0.2) #+ scale_x_log10()
+p5 = tmp %>% ggplot(aes(x=previous)) + geom_density(fill=mainPalette[5], colour=mainPalette[5], alpha = 0.2) 
 
-p6 = tmp %>% ggplot(aes(x=emp.var.rate)) + geom_density(fill=mainPalette[6], colour=mainPalette[6], alpha = 0.2) #+ scale_x_log10()
+p6 = tmp %>% ggplot(aes(x=emp.var.rate)) + geom_density(fill=mainPalette[6], colour=mainPalette[6], alpha = 0.2) 
 
-p7 = tmp %>% ggplot(aes(x=cons.price.idx)) + geom_density(fill=mainPalette[7], colour=mainPalette[7], alpha = 0.2) #+ scale_x_log10()
+p7 = tmp %>% ggplot(aes(x=cons.price.idx)) + geom_density(fill=mainPalette[7], colour=mainPalette[7], alpha = 0.2) 
 
-p8 = tmp %>% ggplot(aes(x=cons.conf.idx)) + geom_density(fill=mainPalette[8], colour=mainPalette[8], alpha = 0.2) #+ scale_x_log10() # this plot looks strange
+p8 = tmp %>% ggplot(aes(x=cons.conf.idx)) + geom_density(fill=mainPalette[8], colour=mainPalette[8], alpha = 0.2) 
 
-p9 = tmp %>% ggplot(aes(x=euribor3m)) + geom_density(fill=mainPalette[1], colour=mainPalette[1], alpha = 0.2) #+ scale_x_log10()
+p9 = tmp %>% ggplot(aes(x=euribor3m)) + geom_density(fill=mainPalette[1], colour=mainPalette[1], alpha = 0.2) 
 
-p10 = tmp %>% ggplot(aes(x=nr.employed)) + geom_density(fill=mainPalette[2], colour=mainPalette[2], alpha = 0.2) #+ scale_x_log10()
+p10 = tmp %>% ggplot(aes(x=nr.employed)) + geom_density(fill=mainPalette[2], colour=mainPalette[2], alpha = 0.2) 
 
 
 library(gridExtra) # arrange grids
@@ -160,14 +156,16 @@ grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10)
 rm(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,tmp)
 ```
 
+
 ## Insights from Data explorations
 
 
  
 
-## Data Preparation
+## Data Preparation and Unsupervised Learning (Clustering)
 
 ```{r}
+#Encode columns in order to perform clustering on categorical values 
 bankData1he <- bankData
 #install.packages(ade4)
 #One-hot-encoding of categorical features:
@@ -183,7 +181,6 @@ for (f in categorical_columns){
 
 str(bankData1he)
 head(bankData1he)
-
 
 
 # Remove y column (column 11) before scaling and clustering
@@ -230,38 +227,18 @@ cluster1 <- bankDataWithCluster[bankDataWithCluster$cluster==1,]
 cluster2 <- bankDataWithCluster[bankDataWithCluster$cluster==2,]
 cluster3 <- bankDataWithCluster[bankDataWithCluster$cluster==3,]
 
-cluster1yes <- cluster1[cluster1$y=='yes',]
-nrow(cluster1yes) #1725
-cluster1no <- cluster1[cluster1$y=='no',]
-nrow(cluster1no) #17419
-
-cluster2yes <- cluster2[cluster2$y=='yes',]
-nrow(cluster2yes) #1208
-cluster2no <- cluster2[cluster2$y=='no',]
-nrow(cluster2no) #8131
-
-cluster3yes <- cluster3[cluster3$y=='yes',]
-nrow(cluster3yes) #1707
-cluster3no <- cluster3[cluster3$y=='no',]
-nrow(cluster3no) #10998
+#Summary by cluster
+summary(cluster1)
+summary(cluster2)
+summary(cluster3)
 
 ```
 
- 
 
-## Data Imputing
-
-
- 
-
-## Feature Selection
-
-
- 
-
-## Modeling
+## Clustering Analysis
 
 To learn more about each cluster, we will run a Random Forest and get the important features (columns) of the cluster. We will also run a Decision Tree to know which are the most important features (columns).
+
 ```{r}
 ######################################## Random Forest on cluster1 - most important features
 #19144 rows
@@ -304,7 +281,9 @@ ggplot(rankImportance, aes(x = reorder(Variables, Importance),
 #3rd feature: job
 #4th feature: nr.employed
 
+```
 
+```{r}
 ##################################### Decision Tree on cluster1 - most important features
 #19144 rows
 
@@ -317,7 +296,7 @@ dt_model <- rpart(y ~ age + job + marital + education + default +
                                             campaign + pdays + previous +
                                             poutcome + emp.var.rate + cons.price.idx +
                                             cons.conf.idx + euribor3m + nr.employed,
-                                            data = cluster2,
+                                            data = cluster1,
                                             method = "class",
                                             minsplit = 2,
                                             minbucket = 1)
@@ -326,10 +305,11 @@ rpart.plot(dt_model, extra=4) # plot tree
 
 summary(dt_model)
 
-#variable importance: nr.employed, euribor3m, emp.var.rate, cons.conf.idx, cons.price.idx, month, poutcome, pdays
+#variable importance: nr.employed, euribor3m, emp.var.rate, cons.conf.idx, cons.price.idx, month, pdays, poutcome, previous
 
+```
 
-
+```{r}
 ######################################## Random Forest on cluster2 - most important features
 #9339 rows
 
@@ -371,7 +351,9 @@ ggplot(rankImportance, aes(x = reorder(Variables, Importance),
 #3rd feature: job
 #4th feature: nr.employed
 
+```
 
+```{r}
 ##################################### Decision Tree on cluster2 - most important features
 #9339 rows
 
@@ -395,8 +377,9 @@ summary(dt_model)
 
 #variable importance: nr.employed, euribor3m, emp.var.rate, cons.conf.idx, cons.price.idx, month, poutcome, pdays
 
+```
 
-
+```{r}
 ######################################## Random Forest on cluster3 - most important features
 #12705 rows
 
@@ -437,8 +420,9 @@ ggplot(rankImportance, aes(x = reorder(Variables, Importance),
 #Top 2 features: age, euribor3m
 #3rd feature: job
 #4th feature: nr.employed
+```
 
-
+```{r}
 ##################################### Decision Tree on cluster3 - most important features
 #12705 rows
 
@@ -462,7 +446,11 @@ summary(dt_model)
 
 #variable importance: nr.employed, euribor3m, emp.var.rate, cons.conf.idx, cons.price.idx, month, pdays, poutcome, previous
 
+```
 
+## Supervised Learning (Prediction Models)
+
+```{r}
 ########################### Supervised Learning - prediction models
 
 ######################################## Random Forest
@@ -526,7 +514,9 @@ auc(as.numeric(solution$y), as.numeric(solution$subscribed))
 
 roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 
+```
 
+```{r}
 ##################################### Decision Tree
 row_count <- nrow(bankDataWithCluster)
 shuffled_rows <- sample(row_count)
@@ -568,7 +558,9 @@ auc(as.numeric(solution$y), as.numeric(factor(solution$subscribed)))
 
 roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(factor(solution$subscribed))), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 
+```
 
+```{r}
 ################################# Naive Bayes
 row_count <- nrow(bankDataWithCluster)
 shuffled_rows <- sample(row_count)
@@ -601,8 +593,9 @@ auc(as.numeric(solution$y), as.numeric(solution$subscribed))
 
 roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col = "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
 
+```
 
-
+```{r}
 ################################### Support vector machine (SVM)
 # SVM takes over 30 minutes to run so we are excluding it
 ##bankDataWithCluster1he <- bankDataWithCluster
@@ -666,7 +659,11 @@ roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), p
 #Area under the curve: 0.5997
 
 ##roc_rose <- plot(roc(as.numeric(solution$y), as.numeric(solution$subscribed)), print.auc = TRUE, col ##= "blue", xlab = "False positive rate (Specificity)", ylab = "True positive rate (Sensitivity)")
+
 ```
+
+
+## Prediction Models Analysis
 
 The higher the area under the curve (AUC), the better the prediction model.
 We tried 4 classification models: Random Forest, Decision Tree, Naive Bayes, and Support Vector Machine (SVM). SVM takes over 30 minutes to run so we are excluding its results.
