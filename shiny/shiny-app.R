@@ -19,6 +19,12 @@ clus2Num = sum(testData$cluster == 2)
 clus3Num = sum(testData$cluster == 3)
 table <- data.table(testData)
 
+val1 <- nrow(table[table$y == "yes" & table$cluster == 1])
+val2 <- nrow(table[table$y == "yes" & table$cluster == 2])
+val3 <- nrow(table[table$y == "yes" & table$cluster == 3])
+
+
+
 
 ui <- fluidPage(
   
@@ -41,7 +47,9 @@ ui <- fluidPage(
   
   
   plotOutput("selectedMaritalPlot"),
-  plotOutput("selectedMaritalPlotY")
+  plotOutput("selectedMaritalPlotY"),
+  
+  plotOutput("clusterBarPlot")
   
   
   
@@ -110,6 +118,10 @@ server <- function(input, output) ({
   output$selectedEduationPlotY <- renderPlot ({
     cluster <- table[table$y == "yes"]
     barplot(prop.table(table(cluster$education)), main = paste("Distrubtion of eduation for postive outcome"))
+  })
+  
+  output$clusterBarPlot <- renderPlot ({
+    barplot(c(val1, val2, val3), names.arg = c("cluster 1", "cluster 2", "cluster 3"), main = paste("Comparions of the clusters with positive outcome"))
   })
   
 })
